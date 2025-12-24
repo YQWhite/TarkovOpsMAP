@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tarkov OpsMap</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-color: #0c0c0f;
+            --panel-bg: rgba(18, 18, 22, 0.98);
+            --accent: #d35400; 
+            --text-main: #b8b8b8;
+            --border: #3a3a3a;
+        }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--bg-color); font-family: 'Segoe UI', sans-serif; color: var(--text-main); }
+        
+        #canvas-wrapper {
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            backdrop-filter: blur(8px);
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(211, 84, 0, 0.1);
+            border-top: 3px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* 侧边栏样式 - 恢复原样宽度 */
+        .sidebar-container {
+            position: absolute; left: 0; top: 0; height: 100%; display: flex; align-items: center;
+            z-index: 100; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .sidebar-container.collapsed { transform: translateX(-68px); }
+
+        .toolbar {
+            margin-left: 20px; background: var(--panel-bg); border: 1px solid var(--border);
+            border-radius: 4px; padding: 12px; display: flex; flex-direction: column; gap: 12px;
+            box-shadow: 5px 0 25px rgba(0,0,0,0.8); align-items: center;
+            width: 44px; /* 显式指定宽度 */
+        }
+
+        .toggle-tab {
+            width: 20px; height: 60px; background: var(--panel-bg); border: 1px solid var(--border);
+            border-left: none; border-radius: 0 4px 4px 0; display: flex; align-items: center;
+            justify-content: center; cursor: pointer; color: var(--accent); font-size: 12px;
+            transition: 0.2s; pointer-events: auto;
+        }
+        .toggle-tab:hover { color: #fff; background: var(--accent); }
+
+        .tool-btn {
+            width: 42px; height: 42px; border: 1px solid transparent; background: #1a1a1a; color: #888;
+            font-size: 18px; cursor: pointer; border-radius: 2px; transition: 0.2s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .tool-btn:hover { border-color: #666; color: #fff; }
+        .tool-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(211, 84, 0, 0.1); }
+
+        .control-group { border-top: 1px solid #333; padding-top: 10px; width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; }
+        .label { font-size: 10px; color: #555; margin-bottom: 5px; text-transform: uppercase; font-weight: bold; width: 100%; }
+        
+        #current-color-preview {
+            width: 30px; height: 16px; border-radius: 2px; border: 1px solid #fff; cursor: pointer;
+            display: block; margin: 0 auto;
+        }
+
+        /* 修复滑块在工具栏内的样式，防止溢出宽度 */
+        .toolbar input[type="range"] { -webkit-appearance: none; width: 42px; background: transparent; cursor: pointer; }
+        .toolbar input[type="range"]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: #333; border-radius: 2px; }
+        .toolbar input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 12px; width: 12px; border-radius: 50%; background: var(--accent); margin-top: -4px; }
+
+        /* 右下角缩放控制条 */
+        .zoom-controls {
+            position: fixed; bottom: 20px; right: 20px; background: var(--panel-bg);
+            border: 1px solid var(--border); border-radius: 4px; padding: 10px 15px;
+            display: flex; align-items: center; gap: 12px; z-index: 100;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); min-width: 180px;
+        }
+        .zoom-btn { background: #1a1a1a; border: 1px solid #333; color: #888; width: 28px; height: 28px; cursor: pointer; border-radius: 2px; }
+        .zoom-btn:hover { color: #fff; border-color: var(--accent); }
+        
+        #zoom-slider { -webkit-appearance: none; width: 100px; background: transparent; }
+        #zoom-slider::-webkit-slider-runnable-track { height: 4px; background: #333; border-radius: 2px; }
+        #zoom-slider::-webkit-slider-thumb { -webkit-appearance: none; height: 12px; width: 12px; border-radius: 50%; background: var(--accent); margin-top: -4px; }
+
+        .top-bar {
+            position: absolute; top: 0; left: 0; right: 0; height: 45px;
+            background: rgba(0,0,0,0.8); border-bottom: 1px solid #222;
+            display: flex; align-items: center; justify-content: space-between; padding: 0 20px;
+            z-index: 90; pointer-events: none;
+        }
+        .top-bar > * { pointer-events: auto; }
+        .map-title { color: var(--accent); font-size: 14px; font-weight: bold; letter-spacing: 1px; }
+
+        #selector-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 10, 12, 0.98); z-index: 200;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+        .grid-container { 
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); 
+            gap: 15px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 10px;
+        }
+        .select-btn {
+            background: #16161a; border: 1px solid #2a2a2a; color: #999; padding: 20px; 
+            border-radius: 2px; cursor: pointer; text-align: center; transition: 0.3s;
+        }
+        .select-btn:hover { border-color: var(--accent); color: #fff; }
+
+        .toast {
+            position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%);
+            background: var(--accent); color: white; padding: 10px 30px; border-radius: 2px;
+            font-size: 12px; font-weight: bold; opacity: 0; z-index: 1000; pointer-events: none; transition: 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div id="loading-text" style="color:var(--accent); font-weight:bold; letter-spacing:2px; font-size: 12px;">LOADING TACTICAL DATA</div>
+    </div>
+
+    <div class="top-bar">
+        <div class="map-title" id="map-name">TACTICAL MAP SYSTEM</div>
+        <div style="display:flex; gap:15px; align-items:center;">
+            <select id="lang-select" style="background:#111; color:#aaa; border:1px solid #333; padding:4px;" onchange="changeLang(this.value)">
+                <option value="zh">ZH-CN</option>
+                <option value="en">EN-US</option>
+            </select>
+            <button onclick="requestReselect()" style="background:#8b0000; color:white; border:none; padding:5px 12px; cursor:pointer; border-radius:2px;">
+                <i class="fa-solid fa-power-off"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="sidebar-container" id="sidebar">
+        <div class="toolbar" id="main-toolbar">
+            <button class="tool-btn active" id="btn-pan" onclick="setMode('pan')">
+                <i class="fa-solid fa-arrow-pointer"></i>
+            </button>
+            <button class="tool-btn" id="btn-draw" onclick="setMode('draw')">
+                <i class="fa-solid fa-pen-nib"></i>
+            </button>
+            <button class="tool-btn" id="btn-erase" onclick="setMode('erase')">
+                <i class="fa-solid fa-eraser"></i>
+            </button>
+            
+            <div class="control-group">
+                <div class="label" id="lbl-color">COLOR</div>
+                <div id="current-color-preview" onclick="document.getElementById('native-color-picker').click()" style="background: #e74c3c;"></div>
+                <input type="color" id="native-color-picker" style="visibility: hidden; width: 0; height: 0; position:absolute;" oninput="handleColorChange(this.value)">
+            </div>
+
+            <div class="control-group">
+                <div class="label" id="lbl-size">SIZE</div>
+                <input type="range" id="brush-size" min="1" max="40" value="10" oninput="setBrushWidth(this.value)">
+                <div id="size-indicator" style="font-size: 10px; color:var(--accent); margin-top:3px;">10PX</div>
+            </div>
+
+            <button class="tool-btn" onclick="clearAnnotations()" style="margin-top: 5px; background:transparent; border:none;">
+                <i class="fa-solid fa-trash-can" style="color:#555"></i>
+            </button>
+        </div>
+        <div class="toggle-tab" onclick="toggleSidebar()">
+            <i class="fa-solid fa-chevron-left" id="toggle-icon"></i>
+        </div>
+    </div>
+
+    <div class="zoom-controls">
+        <button class="zoom-btn" onclick="adjustZoomStep(-0.2)"><i class="fa-solid fa-minus"></i></button>
+        <input type="range" id="zoom-slider" min="0.05" max="5" step="0.01" value="1" oninput="manualZoom(this.value)">
+        <button class="zoom-btn" onclick="adjustZoomStep(0.2)"><i class="fa-solid fa-plus"></i></button>
+        <div id="zoom-percent" style="font-size: 10px; color: var(--accent); width: 35px;">100%</div>
+    </div>
+
+    <div id="canvas-wrapper">
+        <canvas id="c"></canvas>
+    </div>
+
+    <div id="selector-overlay">
+        <h2 id="sel-title" style="color:#fff; letter-spacing:4px; font-weight:100;">MAP SELECTION</h2>
+        <div id="grid-content" class="grid-container"></div>
+        <button id="btn-back" onclick="showFolders()" style="display:none; background:none; border:1px solid #333; color:#666; padding:10px 40px; cursor:pointer; margin-top:30px;">BACK</button>
+    </div>
+
+    <div id="custom-confirm" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:1000; align-items:center; justify-content:center; backdrop-filter: blur(8px);">
+        <div style="background:#121215; border:1px solid var(--accent); padding:40px; width:300px; text-align:center;">
+            <p id="confirm-message" style="margin-bottom:30px; font-size:14px; color:#fff;"></p>
+            <div style="display:flex; gap:15px; justify-content:center;">
+                <button id="confirm-yes" style="background:var(--accent); border:none; padding:10px 25px; color:white; cursor:pointer;">CONFIRM</button>
+                <button id="confirm-no" style="background:#333; border:none; padding:10px 25px; color:white; cursor:pointer;">ABORT</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">MODE SWITCHED</div>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="locales.js"></script>
+
+    <script>
+        const socket = io();
+        let canvas;
+        let currentMode = 'pan';
+        let previousMode = 'pan';
+        let currentColor = '#e74c3c';
+        let currentWidth = 10;
+        let mapDataStructure = {};
+        let currentLang = localStorage.getItem('tarkov_map_lang') || 'zh';
+        let isSpacePressed = false;
+
+        function applyTranslations() {
+            const t = locales[currentLang];
+            document.getElementById('lbl-color').innerText = t.color_label;
+            document.getElementById('lbl-size').innerText = t.size_label;
+            document.getElementById('confirm-yes').innerText = t.confirm;
+            document.getElementById('confirm-no').innerText = t.abort;
+            document.getElementById('btn-back').innerText = t.back_btn;
+            document.getElementById('sel-title').innerText = locales[currentLang].select_folder;
+            document.getElementById('loading-text').innerText = currentLang === 'zh' ? '正在加载战术数据...' : 'LOADING TACTICAL DATA...';
+        }
+
+        function toggleLoading(show) {
+            document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none';
+        }
+
+        function initCanvas() {
+            canvas = new fabric.Canvas('c', {
+                isDrawingMode: false,
+                selection: true,
+                fireRightClick: true,
+                stopContextMenu: true,
+                perPixelTargetFind: true,
+                allowTouchScrolling: false
+            });
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            const uiElements = [document.getElementById('sidebar'), document.querySelector('.zoom-controls')];
+            uiElements.forEach(el => {
+                el.addEventListener('mousedown', e => e.stopPropagation());
+                el.addEventListener('touchstart', e => e.stopPropagation(), {passive:true});
+                el.addEventListener('wheel', e => e.stopPropagation());
+            });
+
+            initCanvasInteraction();
+            initKeyboardShortcuts();
+        }
+
+        function updateZoomUI() {
+            const zoom = canvas.getZoom();
+            const slider = document.getElementById('zoom-slider');
+            slider.value = zoom;
+            document.getElementById('zoom-percent').innerText = Math.round(zoom * 100) + '%';
+        }
+
+        // 核心修复：手动缩放焦点设为当前视口中心
+        function manualZoom(val) {
+            const zoom = parseFloat(val);
+            const vpt = canvas.viewportTransform;
+            // 计算视口物理中心点
+            const center = {
+                x: canvas.getWidth() / 2,
+                y: canvas.getHeight() / 2
+            };
+            canvas.zoomToPoint(new fabric.Point(center.x, center.y), zoom);
+            updateZoomUI();
+        }
+
+        function adjustZoomStep(step) {
+            let newZoom = canvas.getZoom() + step;
+            if (newZoom < 0.05) newZoom = 0.05;
+            if (newZoom > 5) newZoom = 5;
+            manualZoom(newZoom);
+        }
+
+        function initCanvasInteraction() {
+            // PC 滚轮缩放逻辑
+            canvas.on('mouse:wheel', function(opt) {
+                var delta = opt.e.deltaY;
+                var zoom = canvas.getZoom();
+                zoom *= 0.999 ** delta;
+                if (zoom > 5) zoom = 5;
+                if (zoom < 0.05) zoom = 0.05;
+                canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom);
+                opt.e.preventDefault();
+                opt.e.stopPropagation();
+                updateZoomUI();
+            });
+
+            let isDragging = false, lastPosX, lastPosY, lastDistance = null;
+
+            canvas.on('mouse:down', function(opt) {
+                const touches = opt.e.touches;
+                if (touches && touches.length === 2) {
+                    isDragging = false;
+                    lastDistance = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+                    return;
+                }
+
+                const isTouch = opt.e.type === 'touchstart' || (touches && touches.length > 0);
+                if (currentMode === 'pan' || isSpacePressed || opt.e.button === 2 || (isTouch && !canvas.isDrawingMode)) {
+                    isDragging = true;
+                    canvas.selection = false;
+                    const evt = touches ? touches[0] : opt.e;
+                    lastPosX = evt.clientX;
+                    lastPosY = evt.clientY;
+                }
+            });
+
+            canvas.on('mouse:move', function(opt) {
+                const touches = opt.e.touches;
+                if (touches && touches.length === 2 && lastDistance) {
+                    isDragging = false;
+                    const newDistance = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+                    const point = new fabric.Point((touches[0].clientX + touches[1].clientX) / 2, (touches[0].clientY + touches[1].clientY) / 2);
+                    
+                    const ratio = newDistance / lastDistance;
+                    let zoom = canvas.getZoom() * ratio;
+                    if (zoom > 5) zoom = 5;
+                    if (zoom < 0.05) zoom = 0.05;
+
+                    canvas.zoomToPoint(point, zoom);
+                    lastDistance = newDistance;
+                    updateZoomUI();
+                    return;
+                }
+
+                if (isDragging) {
+                    const evt = touches ? touches[0] : opt.e;
+                    var vpt = canvas.viewportTransform;
+                    vpt[4] += evt.clientX - lastPosX;
+                    vpt[5] += evt.clientY - lastPosY;
+                    canvas.requestRenderAll();
+                    lastPosX = evt.clientX;
+                    lastPosY = evt.clientY;
+                }
+            });
+
+            canvas.on('mouse:up', () => {
+                isDragging = false;
+                canvas.selection = true;
+                lastDistance = null;
+            });
+
+            canvas.on('path:created', (e) => {
+                if (currentMode === 'draw') {
+                    e.path.set({ id: Date.now()+'-'+Math.random().toString(36).substr(2,9), lockScalingX: true, lockScalingY: true });
+                    socket.emit('object_added', e.path.toJSON(['id']));
+                } else if (currentMode === 'erase') {
+                    const path = e.path;
+                    const objects = canvas.getObjects().filter(obj => obj.type === 'path' && obj !== path);
+                    objects.forEach(obj => {
+                        if (path.intersectsWithObject(obj)) {
+                            socket.emit('object_removed', obj.id);
+                            canvas.remove(obj);
+                        }
+                    });
+                    canvas.remove(path);
+                    canvas.requestRenderAll();
+                }
+            });
+
+            canvas.on('object:modified', (e) => {
+                if(e.target.id) socket.emit('object_modified', e.target.toJSON(['id']));
+            });
+        }
+
+        function initKeyboardShortcuts() {
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' && !isSpacePressed) {
+                    isSpacePressed = true;
+                    previousMode = currentMode;
+                    setMode('pan', true);
+                    canvas.defaultCursor = 'grab';
+                }
+                if (e.key === 'Delete' || e.key === 'Backspace') {
+                    canvas.getActiveObjects().forEach(obj => {
+                        socket.emit('object_removed', obj.id);
+                        canvas.remove(obj);
+                    });
+                    canvas.discardActiveObject().renderAll();
+                }
+            });
+            window.addEventListener('keyup', (e) => {
+                if (e.code === 'Space') {
+                    isSpacePressed = false;
+                    setMode(previousMode, true);
+                    canvas.defaultCursor = 'default';
+                }
+            });
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const icon = document.getElementById('toggle-icon');
+            sidebar.classList.toggle('collapsed');
+            icon.className = sidebar.classList.contains('collapsed') ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-left';
+        }
+
+        function setMode(mode, isTemporary = false) {
+            currentMode = mode;
+            if (!isTemporary) document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            canvas.isDrawingMode = (mode === 'draw' || mode === 'erase');
+            if (mode === 'draw') {
+                canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+                canvas.freeDrawingBrush.color = currentColor;
+                canvas.freeDrawingBrush.width = currentWidth;
+                if(!isTemporary) document.getElementById('btn-draw').classList.add('active');
+            } else if (mode === 'erase') {
+                canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+                canvas.freeDrawingBrush.color = 'rgba(255,255,255,0.5)';
+                canvas.freeDrawingBrush.width = currentWidth;
+                if(!isTemporary) document.getElementById('btn-erase').classList.add('active');
+            } else if (mode === 'pan' && !isTemporary) {
+                document.getElementById('btn-pan').classList.add('active');
+            }
+            if (!isTemporary) {
+                let msg = mode === 'draw' ? locales[currentLang].mode_draw : (mode === 'erase' ? (currentLang === 'zh' ? "橡皮擦模式" : "ERASER MODE") : locales[currentLang].mode_pan);
+                showToast(msg);
+            }
+        }
+
+        function handleColorChange(hex) {
+            currentColor = hex;
+            document.getElementById('current-color-preview').style.background = hex;
+            if(currentMode === 'draw') canvas.freeDrawingBrush.color = hex;
+            const activeObj = canvas.getActiveObject();
+            if(activeObj && activeObj.type === 'path') {
+                activeObj.set({stroke: hex});
+                canvas.renderAll();
+                socket.emit('object_modified', activeObj.toJSON(['id']));
+            }
+        }
+
+        function setBrushWidth(val) {
+            currentWidth = parseInt(val);
+            document.getElementById('size-indicator').innerText = val + 'PX';
+            if(canvas.isDrawingMode) canvas.freeDrawingBrush.width = currentWidth;
+            const activeObj = canvas.getActiveObject();
+            if(activeObj && activeObj.type === 'path') {
+                activeObj.set({ strokeWidth: currentWidth });
+                canvas.renderAll();
+                socket.emit('object_modified', activeObj.toJSON(['id']));
+            }
+        }
+
+        function showCustomConfirm(msg) {
+            return new Promise(res => {
+                const m = document.getElementById('custom-confirm');
+                document.getElementById('confirm-message').innerText = msg;
+                m.style.display = 'flex';
+                document.getElementById('confirm-yes').onclick = () => { m.style.display='none'; res(true); };
+                document.getElementById('confirm-no').onclick = () => { m.style.display='none'; res(false); };
+            });
+        }
+
+        async function clearAnnotations() { if(await showCustomConfirm(locales[currentLang].clear_all)) socket.emit('clear_annotations'); }
+        async function requestReselect() { if(await showCustomConfirm(locales[currentLang].reselect)) socket.emit('reset_map'); }
+
+        async function fetchMaps() {
+            const res = await fetch('/api/maps');
+            mapDataStructure = await res.json();
+        }
+
+        function showFolders() {
+            const container = document.getElementById('grid-content');
+            container.innerHTML = '';
+            document.getElementById('btn-back').style.display = 'none';
+            document.getElementById('sel-title').innerText = locales[currentLang].select_folder;
+            const trans = locales[currentLang].mapNames || {};
+            Object.keys(mapDataStructure).forEach(f => {
+                const d = document.createElement('div');
+                d.className = 'select-btn';
+                d.innerHTML = `<i class="fa-solid fa-map-location-dot" style="font-size:24px; color:var(--accent)"></i><br><br>${trans[f] || f}`;
+                d.onclick = () => showFiles(f);
+                container.appendChild(d);
+            });
+        }
+
+        function showFiles(folder) {
+            const container = document.getElementById('grid-content');
+            container.innerHTML = '';
+            document.getElementById('btn-back').style.display = 'inline-block';
+            document.getElementById('sel-title').innerText = locales[currentLang].select_file;
+            const fileTrans = locales[currentLang].fileNames || {};
+            mapDataStructure[folder].forEach(file => {
+                const d = document.createElement('div');
+                d.className = 'select-btn';
+                d.innerHTML = `<i class="fa-regular fa-image"></i><br><br><span style="font-size:11px;">${fileTrans[file] || file}</span>`;
+                d.onclick = () => {
+                    toggleLoading(true);
+                    socket.emit('change_map', { folder, file });
+                };
+                container.appendChild(d);
+            });
+        }
+
+        function loadMapImage(mapData) {
+            const url = `/maps/${mapData.folder}/${mapData.file}`;
+            const fTrans = (locales[currentLang].mapNames || {})[mapData.folder] || mapData.folder;
+            const iTrans = (locales[currentLang].fileNames || {})[mapData.file] || mapData.file;
+            document.getElementById('map-name').innerText = `${fTrans} // ${iTrans}`.toUpperCase();
+            
+            fabric.Image.fromURL(url, (img) => {
+                canvas.setBackgroundImage(img, () => {
+                    canvas.renderAll();
+                    toggleLoading(false);
+                    updateZoomUI();
+                });
+                const scale = Math.min(canvas.width/img.width, canvas.height/img.height) * 0.85;
+                canvas.setViewportTransform([scale, 0, 0, scale, (canvas.width-img.width*scale)/2, (canvas.height-img.height*scale)/2]);
+            });
+        }
+
+        function showToast(m) {
+            const t = document.getElementById('toast');
+            t.innerText = m; t.style.opacity = 1;
+            setTimeout(() => t.style.opacity = 0, 2000);
+        }
+
+        function changeLang(l) { localStorage.setItem('tarkov_map_lang', l); location.reload(); }
+        function resizeCanvas() { canvas.setWidth(window.innerWidth); canvas.setHeight(window.innerHeight); }
+
+        socket.on('init_state', async (state) => {
+            await fetchMaps();
+            document.getElementById('lang-select').value = currentLang;
+            applyTranslations();
+            if (state.currentMap) {
+                toggleLoading(true);
+                loadMapImage(state.currentMap);
+                document.getElementById('selector-overlay').style.display = 'none';
+                fabric.util.enlivenObjects(state.annotations, (objs) => objs.forEach(o => canvas.add(o)));
+            } else {
+                showFolders();
+            }
+        });
+
+        socket.on('map_changed', (m) => {
+            document.getElementById('selector-overlay').style.display = 'none';
+            canvas.clear();
+            loadMapImage(m);
+        });
+
+        socket.on('map_reset', () => {
+            canvas.clear();
+            document.getElementById('selector-overlay').style.display = 'flex';
+            showFolders();
+        });
+
+        socket.on('object_added', (o) => fabric.util.enlivenObjects([o], (objs) => canvas.add(objs[0])));
+        socket.on('object_modified', (d) => {
+            const o = canvas.getObjects().find(x => x.id === d.id);
+            if(o) { o.set(d); o.setCoords(); canvas.requestRenderAll(); }
+        });
+        socket.on('object_removed', (id) => {
+            const o = canvas.getObjects().find(x => x.id === id);
+            if(o) canvas.remove(o);
+        });
+        socket.on('clear_canvas_content', () => {
+            const bg = canvas.backgroundImage;
+            canvas.clear().setBackgroundImage(bg, canvas.renderAll.bind(canvas));
+        });
+
+        initCanvas();
+    </script>
+</body>
+</html>

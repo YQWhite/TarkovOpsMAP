@@ -1,0 +1,24 @@
+{
+  "name": "tarkov-map-server",
+  "version": "1.0.0",
+  "main": "server.js",
+  "bin": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "pkg . --targets node16-win-x64 --out-path dist"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "fabric": "^7.0.0",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*",
+      "node_modules/socket.io/client-dist/socket.io.min.js"
+    ]
+  }
+}
