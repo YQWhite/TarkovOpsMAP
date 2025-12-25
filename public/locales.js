@@ -1,0 +1,61 @@
+const locales = {
+    zh: {
+        title: "塔科夫战术地图",
+        select_folder: "区域选择",
+        select_file: "地图选择",
+        back_btn: "返回区域选择",
+        reselect: "确认要重新选择地图吗？",
+        clear_all: "确认要清除所有批注吗？",
+        confirm: "确定",
+        abort: "取消",
+        color_label: "颜色",
+        size_label: "粗细",
+        mode_pan: "编辑模式",
+        mode_draw: "绘图模式",
+        lang_label: "语言",
+        mapNames: {
+            "CUSTOMS": "海关", "FACTORY": "工厂", "GROUNDZERO": "中心区",
+            "INTERCHANGE": "立交桥", "LABYRINTH": "迷宫", "LIGHTHOUSE": "灯塔",
+            "RESERVE": "储备站", "SHORELINE": "海岸线", "STREETSOFTARKOV": "塔科夫街区",
+            "WOODS": "森林", "LABS": "实验室", "TERMINAL": "终点站"
+        },
+        fileNames: {
+            "re3mrCustoms2.png": "海关 - 完整3D地图",
+            "re3mrCustomsDorms.png": "海关 - 宿舍楼2D地图",
+            "FactorybyRe3mr.png": "工厂 - 完整2D地图",
+            "GroundZero.png": "中心区 - 完整3D地图",
+            "re3mrInterchange.jpg": "立交桥 - 完整2D地图",
+            "re3mrULTRA3Dmap.png": "立交桥 - 商场3D地图",
+            "re3mrLabyrinthPNG.png": "迷宫 - 完整2D地图",
+            "re3mrLighthouseISO.png": "灯塔 - 完整3D地图横向",
+            "re3mrLighthouseVERT.png": "灯塔 - 完整3D地图纵向",
+            "Re3mrReserveLossless.png": "储备站 - 完整3D地图",
+            "re3mrReserveTunnels.png": "储备站 - 地下2D地图",
+            "re3mrReserveTunnels3D.png": "储备站 - 地下3D地图",
+            "re3mrShoreline2.png": "海岸线 - 完整3D地图",
+            "re3mrShorelineResort.png": "海岸线 - 疗养院2D地图",
+            "WikiTerminalMap.jpg": "终点站 - 完整2D地图",
+            "re3mrLexosMinefield.png": "街区 - 卡班雷区地图",
+            "TrainDepotHQ.png": "森林 - 列车站3D地图",
+            "WoodsRe3mrPNG.png": "森林 - 完整3D地图",
+            "re3mrStreetsofTarkov.png": "街区 - 完整3D地图"
+        }
+    },
+    en: {
+        title: "Tarkov Tactical Map",
+        select_folder: "MAP SELECTION",
+        select_file: "FILE SELECTION",
+        back_btn: "BACK TO REGIONS",
+        reselect: "Return to selection?",
+        clear_all: "Clear all marks?",
+        confirm: "CONFIRM",
+        abort: "ABORT",
+        color_label: "COLOR",
+        size_label: "SIZE",
+        mode_pan: "TACTICAL MODE",
+        mode_draw: "DRAWING MODE",
+        lang_label: "LANG",
+        mapNames: {},
+        fileNames: {}
+    }
+};
